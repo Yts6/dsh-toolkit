@@ -1,6 +1,6 @@
 # dsh-toolkit
 
-两个 DeepSeek Harness 增强，装好之后 DSH 就多两项能力：
+两个 DeepSeek Harness 新功能，装好之后 DSH 就多两项能力：
 
 | 能力 | 你能得到什么 | 类型 |
 | --- | --- | --- |
