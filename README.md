@@ -31,7 +31,7 @@
 
    最终应形如：
 
-   ```
+   ```   
    %USERPROFILE%\.dsh\skills\
    ├─ dsh-delete-session\
    │   ├─ SKILL.md
@@ -186,6 +186,4 @@ dsh-toolkit/
 * 正在打开或正在运行的会话不能删除——先切到别的会话再删。
 * 补丁改的是安装目录里的文件，**不随应用升级保留**，需要重跑。
 
-## License
 
-MIT，见 [LICENSE](LICENSE)。
