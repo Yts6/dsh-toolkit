@@ -4,7 +4,7 @@ description: 为 DeepSeek Harness 增加「删除会话」功能：在会话行�
 whenToUse: 用户要求删除某个会话但发现 DSH 没有删除入口；用户说要装 dsh-delete-session / dsh-toolkit；或用户想真正从磁盘清掉会话历史而不是归档。
 metadata:
   version: "1.0.0"
-  upstream: "https://github.com/<owner>/dsh-toolkit"
+  upstream: "https://github.com/Yts6/dsh-toolkit"
 ---
 
 # 给 DSH 装上「删除会话」

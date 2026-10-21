@@ -4,7 +4,7 @@ description: 为 Windows 版 DeepSeek Harness 的托盘右键菜单增加「重�
 whenToUse: 用户要求「重启 DSH」「加个重启按钮」「改完插件要重启太麻烦」；或用户要安装 dsh-tray-restart / dsh-toolkit 的托盘部分。
 metadata:
   version: "1.0.0"
-  upstream: "https://github.com/<owner>/dsh-toolkit"
+  upstream: "https://github.com/Yts6/dsh-toolkit"
   platform: windows
 ---
 
