@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Delete session">
+  <defs>
+    <linearGradient id="dsd-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4d6bfe"/>
+      <stop offset="1" stop-color="#2f47c8"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#dsd-bg)"/>
+  <path d="M16 22h32a0 0 0 0 0 0 0" fill="none" stroke="none"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 25h28"/>
+    <path d="M26 25v-3.2c0-1 .8-1.8 1.8-1.8h8.4c1 0 1.8.8 1.8 1.8V25"/>
+    <path d="M23 25l1.4 19.2c.1 1.3 1.2 2.3 2.5 2.3h10.2c1.3 0 2.4-1 2.5-2.3L41 25"/>
+    <path d="M28.5 32v9M35.5 32v9"/>
+  </g>
+</svg>

@@ -1,0 +1,7 @@
+# dsh-session-delete: the Harness ships archival but no deletion, so this
+# profile bundle adds the missing Session deletion row on top of the shipped
+# Workspace plugin. The Host row mounts the deletion route; the package's
+# `dsh.client` manifest loads the browser half that adds the menu row.
+- insert:
+    - id: dsh-session-delete
+      name: 'dsh-session-delete'

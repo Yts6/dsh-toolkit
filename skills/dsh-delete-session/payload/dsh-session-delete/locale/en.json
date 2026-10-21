@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Delete session",
+    "description": "Adds “Delete session” to the session menu: removes the session log file together with its workspace accounting, archive, and pin membership."
+  }
+}
