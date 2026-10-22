@@ -68,8 +68,8 @@ curl -s http://127.0.0.1:<端口>/dsh-session-delete/health
 
 * 位置：侧栏会话行 →「⋯」→ 删除会话（在「复制 Session ID」下面，红色）。
 * 会真的删除：会话日志目录 + 工作区记账 + 归档/置顶标记，**不可撤销**。
-* **正在阅读的对话也能删**：确认框会识别「这是当前打开的对话」，标题变成「删除当前对话」、按钮变成「关闭并删除」；确认后先关闭它（释放它对 Host Agent 的占用）再删除，完成后自动回到空白新会话。
-* **有运行中工作的会话也能删**：确认框会说明「确认后会先停止并删除」，插件先请各提供方停止工作（回合/后台任务/子代理/提醒），再卸载 Agent，然后删除。
+* **规则只有一条：当前正在使用的那个对话不能删。** 它的菜单项显示为「删除会话（当前对话不可删）」并置灰禁用，鼠标悬停说明原因；先切换到别的对话即可删除它。
+* 除当前对话外的会话**都能删**：即使它曾被打开过、仍被主机加载着，或还有运行中的回合/后台任务/子代理/提醒——插件会先停止这些工作、再卸载 Agent，然后删文件（这一步有 15 秒上限，超时会报 `session/release-timeout` 且不删）。
 * 只想要「不显示」而不是删掉，请用内置的「归档会话」。
 * 卸载：插件页停用/移除，或 `plugin_manager` 的 `remove_bundle`（名字 `dsh-session-delete`）。
 
@@ -81,8 +81,10 @@ curl -s http://127.0.0.1:<端口>/dsh-session-delete/health
 | `health` 404 | 主机行没挂上：看安装结果是否为 `applied`，必要时重启 DSH |
 | 安装返回 `not-bundle` | target 指错了：必须指向 `dsh-session-delete` 目录（含 `package.json` / `cordis.patch.yml`），不是它的上级 |
 | 用户看不到菜单项 | 先刷新页面；再看实时 slot 注册（`cordis_inspect_query` 的 client `Slots.listSubTree`，root=`sidebar.workspaces.session.menu.item`）里是否有 `dsh-session-delete`、是否 `active: true` |
-| 删除报 `session/busy` | 该会话正被打开或仍有工作：界面确认框会自动带 `force`；手工调接口时加 `{"force": true}` |
+| 删除报 `session/busy` | 该会话仍有工作且调用方没要求强制：界面确认框会自动带 `force`；手工调接口时加 `{"force": true}` |
+| 删除报 `session/current` | 那是当前正在使用的对话，规则上不允许删；先切到别的对话 |
 | 删除报 `session/release-timeout` | Agent 收尾超过 15 秒（通常有未结束的轮次）：等它结束再试，或重启 DSH |
+| 菜单项一直是灰的 | 该项表示「这就是你正在使用的对话」；切到别的对话后它就会变红可点 |
 | 删除后侧栏残留空「未分组」 | 用旧版本插件删过会话；刷新页面即可，或 `session/delete` 返回里 `notified: false` 说明通知没发出去 |
 | 想批量清理 | 仓库另有维护脚本思路：删前用 `sessionPersistence.stat()` 确认存在，删后对账「磁盘目录 vs 工作区记账」，别直接 `rm -rf` |
 

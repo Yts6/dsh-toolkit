@@ -36,7 +36,7 @@ const ROUTE_PREFIX = '/dsh-session-delete';
 const MAX_BODY_BYTES = 8 * 1024;
 
 /** Build marker reported by `GET /health`, so a reload is observable. */
-const BUILD = 4;
+const BUILD = 5;
 
 /** Session identities are one safe path segment; the backend encodes them 1:1. */
 const SESSION_ID_PATTERN = /^[A-Za-z0-9._~-]{1,200}$/;
@@ -282,7 +282,8 @@ function artifactDirectory(persistence, header, sessionId) {
  * @param ctx - the plugin's Host context.
  * @param sessionId - the Session identity to delete.
  * @param options - `dryRun` resolves the target without removing anything;
- *   `force` releases a live Agent and stops running work before deleting.
+ *   `force` releases a live Agent and stops running work before deleting;
+ *   `current` refuses the conversation the user is reading.
  * @returns the deletion receipt.
  * @throws {DeleteError} with a stable code when the Session is unknown, busy,
  *   or cannot be located safely.
@@ -290,6 +291,17 @@ function artifactDirectory(persistence, header, sessionId) {
 async function deleteSession(ctx, sessionId, options = {}) {
   if (typeof sessionId !== 'string' || !SESSION_ID_PATTERN.test(sessionId)) {
     throw new DeleteError(400, 'session/invalid-id', '会话标识非法');
+  }
+  // The conversation on screen is the one Session this plugin refuses to delete,
+  // whatever the caller claims: the Client marks it, and the rule is enforced
+  // here so a stale page, a bookmarklet, or a retry cannot remove what the user
+  // is reading.
+  if (options.current === true) {
+    throw new DeleteError(
+      409,
+      'session/current',
+      '这是你正在使用的对话，不能删除；请先切换到其他对话，再来删除它',
+    );
   }
   const persistence = ctx.sessionPersistence;
   const snapshot = await persistence.stat(sessionId);
@@ -399,6 +411,7 @@ export function apply(ctx) {
             const receipt = await deleteSession(ctx, body?.sessionId, {
               dryRun: body?.dryRun === true,
               force: body?.force === true,
+              current: body?.current === true,
             });
             log('info', `${name}: ${receipt.dryRun === true ? 'resolved' : 'deleted'} session ${receipt.sessionId}`);
             sendJson(res, 200, { ok: true, ...receipt });

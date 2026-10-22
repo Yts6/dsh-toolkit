@@ -29,19 +29,21 @@ window.__ModuleLoader__.load({
       'meta.title': '删除会话',
       'meta.description': '在会话右键菜单中增加“删除会话”，可连同会话日志、工作区记账与归档/置顶标记一起清除。',
       'menu.delete': '删除会话',
+      'menu.deleteCurrent': '删除会话（当前对话不可删）',
+      'menu.currentDisabled': '这是你正在使用的对话，不能删除；请先切换到其他对话再来删它',
       'dialog.title': '删除会话',
-      'dialog.titleOpen': '删除当前对话',
+      'dialog.titleOpen': '删除会话',
       'dialog.description': '将永久删除会话“{name}”及其全部对话记录。',
-      'dialog.descriptionOpen': '将永久删除你正在阅读的这个对话“{name}”及其全部对话记录。',
+      'dialog.descriptionOpen': '将永久删除会话“{name}”及其全部对话记录。',
       'dialog.openNote': '这个对话正打开着：确认后会先关闭它，再删除它的记录。',
       'dialog.untitled': '未命名',
       'dialog.warning': '删除后无法撤销：会话日志文件会从磁盘移除，该会话也会从工作区、归档与置顶列表中消失。',
       'dialog.identity': '会话 ID：{id}',
       'dialog.confirm': '删除',
-      'dialog.confirmOpen': '关闭并删除',
+      'dialog.confirmOpen': '删除',
       'dialog.cancel': '取消',
       'dialog.pending': '正在删除…',
-      'dialog.pendingOpen': '正在关闭并删除…',
+      'dialog.pendingOpen': '正在停止工作并删除…',
       'dialog.close': '关闭',
       'dialog.failed': '删除失败：{message}',
       'menu.failed': '无法删除会话：{message}',
@@ -51,6 +53,8 @@ window.__ModuleLoader__.load({
       'meta.title': 'Delete session',
       'meta.description': 'Adds “Delete session” to the session menu, removing the session log together with its workspace accounting and archive/pin membership.',
       'menu.delete': 'Delete session',
+      'menu.deleteCurrent': 'Delete session (the open one cannot be deleted)',
+      'menu.currentDisabled': 'This is the conversation you are using, so it cannot be deleted. Switch to another conversation first.',
       'dialog.title': 'Delete session',
       'dialog.titleOpen': 'Delete this conversation',
       'dialog.description': 'Session “{name}” and its complete conversation history will be permanently deleted.',
@@ -74,6 +78,7 @@ window.__ModuleLoader__.load({
 .dsd-item{display:flex;align-items:center;gap:6px;width:100%;min-height:34px;padding:6px 8px;border:none;border-radius:8px;background:transparent;cursor:pointer;font-size:13px;line-height:20px;color:var(--dsw-alias-state-error-primary,#e5484d);text-align:left}
 .dsd-item:hover:not(:disabled),.dsd-item:focus-visible:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-danger,rgba(229,72,77,.12));outline:none}
 .dsd-item:disabled{opacity:.4;cursor:not-allowed}
+.dsd-itemDisabled,.dsd-itemDisabled:hover{color:var(--dsw-alias-label-tertiary,#8a8f98);background:transparent}
 .dsd-icon{display:inline-flex;flex:none;width:14px;height:14px;align-items:center;justify-content:center;color:inherit}
 .dsd-icon svg{width:14px;height:14px}
 .dsd-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -185,9 +190,20 @@ window.__ModuleLoader__.load({
       return undefined;
     }
 
-    /** The Session row menu entry. */
-    function DeleteSessionMenuItem({ sessionId, displayTitle, useMenuOpenState, t, openDelete }) {
+    /**
+     * The Session row menu entry.
+     *
+     * The conversation currently on screen is the one Session this plugin will
+     * not delete: its Agent owns the live log and the user is reading it, so
+     * removing it mid-read is never what a click means. The row stays visible
+     * but disabled with the reason as its tooltip, which explains the rule
+     * instead of letting the request fail after a confirmation.
+     */
+    function DeleteSessionMenuItem({ sessionId, displayTitle, useMenuOpenState, useSessions, t, openDelete }) {
       const [, setMenuOpen] = useMenuOpenState();
+      const isCurrent = useSessions(
+        (list) => (list?.byId?.[sessionId]?.retainedBy?.mainView ?? 0) > 0,
+      );
       return h(React.Fragment, null, [
         h(Styles, { key: 'styles' }),
         h('div', { key: 'row', className: 'dsd-wrap' }, [
@@ -198,24 +214,40 @@ window.__ModuleLoader__.load({
               key: 'button',
               type: 'button',
               role: 'menuitem',
-              className: 'dsd-item',
+              className: isCurrent ? 'dsd-item dsd-itemDisabled' : 'dsd-item',
+              disabled: isCurrent,
+              title: isCurrent ? t('menu.currentDisabled') : undefined,
+              'aria-disabled': isCurrent ? true : undefined,
               onClick: (event) => {
                 event.stopPropagation();
+                if (isCurrent) return;
                 setMenuOpen(false);
-                openDelete({ sessionId, title: displayTitle });
+                openDelete({ sessionId, title: displayTitle, current: isCurrent });
               },
             },
             [
               h('span', { key: 'icon', className: 'dsd-icon' }, h(TrashIcon)),
-              h('span', { key: 'label', className: 'dsd-label' }, t('menu.delete')),
+              h(
+                'span',
+                { key: 'label', className: 'dsd-label' },
+                isCurrent ? t('menu.deleteCurrent') : t('menu.delete'),
+              ),
             ],
           ),
         ]),
       ]);
     }
 
-    /** The frame-wide confirmation dialog. */
-    function DeleteSessionDialog({ t, useLocaleRevision, useSessions, leaveOpenSession }) {      useLocaleRevision();
+    /**
+     * The frame-wide confirmation dialog.
+     *
+     * It only ever deletes a Session that is not on screen — the current
+     * conversation's row is disabled in the menu — but a Session may still be
+     * open in another tab or held by a pending write, so the Host is asked with
+     * `force` to stop its work and release it before the log is removed.
+     */
+    function DeleteSessionDialog({ t, useLocaleRevision }) {
+      useLocaleRevision();
       const request = usePending();
       const [pendingState, setPendingState] = useState(false);
       const [error, setError] = useState(null);
@@ -224,14 +256,6 @@ window.__ModuleLoader__.load({
 
       const open = request !== null;
       const sessionId = request?.sessionId;
-
-      // A Session retained by the main view is the conversation on screen. The
-      // Host refuses to delete it unless asked to release it, so the dialog says
-      // so up front and keeps the ordinary wording for every other row.
-      const isOpen =
-        open && typeof useSessions === 'function'
-          ? useSessions((list) => (list?.byId?.[sessionId]?.retainedBy?.mainView ?? 0) > 0)
-          : false;
 
       useEffect(() => {
         if (!open) return undefined;
@@ -260,7 +284,7 @@ window.__ModuleLoader__.load({
 
       const title = request.title !== undefined && request.title !== '' ? request.title : t('dialog.untitled');
 
-      const confirm = async (wasOpen) => {
+      const confirm = async () => {
         setPendingState(true);
         setError(null);
         try {
@@ -268,19 +292,18 @@ window.__ModuleLoader__.load({
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             credentials: 'same-origin',
-            // `force` releases the Session's live Agent (the same teardown an
-            // app quit performs) and stops its running work, so deleting the
-            // conversation you are reading works instead of being refused.
-            body: JSON.stringify({ sessionId: request.sessionId, force: true }),
+            // `force` asks the Host to stop this Session's running work and
+            // release its Agent (the same teardown an app quit performs) before
+            // the log is removed, so an idle-but-loaded Session still deletes.
+            // `current` carries the menu's own rule to the Host, which refuses
+            // the on-screen conversation even if this page is stale.
+            body: JSON.stringify({ sessionId: request.sessionId, force: true, current: request.current === true }),
           });
           const payload = await response.json().catch(() => null);
           if (!response.ok || payload?.ok !== true) {
             throw new Error(payload?.message ?? `HTTP ${response.status}`);
           }
           setPending(null);
-          // The conversation being read no longer exists: leave it and show the
-          // app's empty state instead of a transcript whose log is gone.
-          if (wasOpen && typeof leaveOpenSession === 'function') leaveOpenSession();
         } catch (failure) {
           setError(failure instanceof Error ? failure.message : String(failure));
         } finally {
@@ -317,11 +340,7 @@ window.__ModuleLoader__.load({
               },
               [
                 h('div', { key: 'header', className: 'dsd-header' }, [
-                  h(
-                    'h2',
-                    { key: 'title', id: 'dsd-dialog-title', className: 'dsd-title' },
-                    t(isOpen ? 'dialog.titleOpen' : 'dialog.title'),
-                  ),
+                  h('h2', { key: 'title', id: 'dsd-dialog-title', className: 'dsd-title' }, t('dialog.title')),
                   h(
                     'button',
                     {
@@ -339,25 +358,15 @@ window.__ModuleLoader__.load({
                   h(
                     'p',
                     { key: 'description', id: 'dsd-dialog-description', className: 'dsd-text' },
-                    t(isOpen ? 'dialog.descriptionOpen' : 'dialog.description', { name: title }),
+                    t('dialog.description', { name: title }),
                   ),
-                  isOpen
-                    ? h('div', { key: 'openNote', className: 'dsd-warning' }, [
-                        h('span', { key: 'icon', className: 'dsd-warning-icon' }, h(WarningIcon)),
-                        h('p', { key: 'text' }, t('dialog.openNote')),
-                      ])
-                    : null,
                   h('div', { key: 'warning', className: 'dsd-warning' }, [
                     h('span', { key: 'icon', className: 'dsd-warning-icon' }, h(WarningIcon)),
                     h('p', { key: 'text' }, t('dialog.warning')),
                   ]),
                   h('p', { key: 'id', className: 'dsd-id' }, t('dialog.identity', { id: request.sessionId })),
                   pendingState
-                    ? h(
-                        'p',
-                        { key: 'pending', className: 'dsd-status', role: 'status' },
-                        t(isOpen ? 'dialog.pendingOpen' : 'dialog.pending'),
-                      )
+                    ? h('p', { key: 'pending', className: 'dsd-status', role: 'status' }, t('dialog.pending'))
                     : null,
                   error !== null ? h('p', { key: 'error', className: 'dsd-error', role: 'alert' }, t('dialog.failed', { message: error })) : null,
                 ]),
@@ -381,9 +390,9 @@ window.__ModuleLoader__.load({
                       type: 'button',
                       className: 'dsd-button dsd-confirm',
                       disabled: pendingState,
-                      onClick: () => confirm(isOpen),
+                      onClick: confirm,
                     },
-                    t(isOpen ? 'dialog.confirmOpen' : 'dialog.confirm'),
+                    t('dialog.confirm'),
                   ),
                 ]),
               ],
@@ -401,32 +410,6 @@ window.__ModuleLoader__.load({
         ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-session-delete: locale');
 
         const openDelete = (request) => setPending(request);
-
-        /**
-         * Leave a conversation whose log was just deleted.
-         *
-         * The retained main-view reference dies with the Host side, so no
-         * Session id may stay selected: switching to the Workspace's blank
-         * Session is the shipped "new conversation" behaviour and lands the user
-         * on an empty composer instead of a transcript that no longer exists.
-         * Falls back to clearing the selection when no Workspace is available.
-         */
-        const leaveOpenSession = () => {
-          try {
-            const uiWorkspace = ctx.get('uiWorkspace');
-            const workspaces = ctx.get('workspaces')?.list?.getSnapshot?.();
-            const current = workspaces?.items?.[0];
-            if (uiWorkspace !== undefined && current !== undefined) {
-              uiWorkspace.startSession(current.workspaceId);
-              return;
-            }
-            if (uiWorkspace !== undefined && typeof uiWorkspace.openSession === 'function') {
-              ctx.get('layout')?.selectPanel?.(null);
-            }
-          } catch (error) {
-            console.warn('[dsh-session-delete] could not leave the deleted conversation:', error);
-          }
-        };
 
         ctx.slots.inject('sidebar.workspaces.session.menu.item', () =>
           ctx.slots.register(
@@ -447,7 +430,7 @@ window.__ModuleLoader__.load({
               name: 'shell.overlay',
               id: 'dsh-session-delete.dialog',
               locale: NS,
-              inject: () => ({ t, useLocaleRevision, leaveOpenSession }),
+              inject: () => ({ t, useLocaleRevision }),
             },
             DeleteSessionDialog,
           ),
