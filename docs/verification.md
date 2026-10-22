@@ -8,22 +8,25 @@
 
 | 项 | 结果 |
 |---|---|
-| 主机路由存活 | `GET /dsh-session-delete/health` → `{"ok":true,…,"build":3}` |
+| 主机路由存活 | `GET /dsh-session-delete/health` → `{"ok":true,…,"build":4}` |
 | 非法会话 id | `session/invalid-id`（拒绝，未触碰磁盘） |
 | 不存在的会话 | `session/not-found` |
 | 真实删除 | 删除后日志目录从磁盘消失，返回回执含 `directory` / `revision` |
-| 运行中保护 | 子会话还在跑时删除 → `409 session/in-use`，文件完好；跑完后删除 → 成功 |
+| 忙碌拒绝 | 打开的会话不带 `force` → `409 session/busy`，带 `forceable: true` 与工作清单，**文件保持完好** |
+| 强制删除（已打开） | 带 `force` → 先 `agent.ctx.fiber.dispose()` 卸载 Agent，再删目录，返回 `ok` |
 | 工作区记账 | 属于某工作区的会话删除后，`tables.workspaces[*].sessionIds` 中对应条目消失 |
 | 归档/置顶 | 清理调用成功（`unarchiveSession` / `unpinSession`），无残留 |
 | 对账 | 删除后「磁盘会话目录数」与「记账会话数」一致，无悬空条目 |
 | 页面同步 | 删除后发 `api-session/removed`，侧栏不再残留空的「未分组」 |
 
+强制删除路径用假 Host 上下文做了自动化验证（`_work/test-force.mjs` 的等价逻辑）：无 `force` → 409 且文件保留；带 `force` → `agent.ctx.fiber.dispose()` 被调用 → 目录删除 → 发出 `api-session/removed`。
+
 **未验证 / 限制**
 
-* 浏览器里的视觉呈现（菜单行样式、确认框布局）由用户目视确认；开发机无法截图验证。
+* 浏览器里的视觉呈现与「删除后回到空白会话」的观感由用户目视确认；开发机无法截图验证。
 * 只在一个 profile 上验证过；多 profile 并发未测。
 * 删除是不可逆的；插件刻意不提供撤销。
-* 正在打开或仍有运行中工作的会话会被拒绝（设计如此）。
+* 卸载 Agent 后的收尾有 15 秒上限：若有未结束的轮次超过它，请求以 `session/release-timeout` 失败且不删文件。
 * 若删除后 `notified: false`，说明通知没发出去——页面刷新即可恢复一致。
 
 ## 托盘重启

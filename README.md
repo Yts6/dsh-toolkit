@@ -71,17 +71,19 @@ DeepSeek Harness 的核心设计是「会话只归档、从不删除」（`dsh-c
 本插件补上这个缺口，并且是**安全**地补：
 
 * 会话日志目录、工作区记账、归档/置顶标记**一起**清掉，不留悬空记录；
-* 正在打开、或仍有运行中的回合/后台任务/子代理/定时提醒的会话**拒绝删除**并说明原因（避免删掉正在写入的日志）；
+* **正在阅读的对话也能删**：确认框会识别「这是当前打开的对话」，按钮变成「关闭并删除」，确认后先关闭它、释放 Host Agent 的占用，再删除，完成后回到空白新会话；
+* **有运行中工作的会话也能删**：确认框说明「确认后会先停止并删除」，插件先请各提供方停止工作（回合/后台任务/子代理/提醒），再卸载 Agent，然后删除；
 * 主机删除后**主动通知所有已连接的页面**，侧栏立刻消失，不会留下空的「未分组」分组。
 
 ### 用法
 
-侧栏会话行 →「⋯」→ **删除会话** → 确认框里会显示会话标题与 ID、并提示不可撤销 → 点「删除」。
+侧栏会话行 →「⋯」→ **删除会话** → 确认框里会显示会话标题与 ID、并提示不可撤销 → 点「删除」（若删的是当前打开的对话，按钮是「关闭并删除」）。
 
 ### 实现要点
 
 * 菜单项注册在 `sidebar.workspaces.session.menu.item`（order 500，排在「复制 Session ID」之后），确认框注册在 `shell.overlay`。
-* 删除动作走插件自己的主机路由 `POST /dsh-session-delete/delete`：校验会话存在、非 live、无运行中工作 → 用存储后端自己的 `locate()` 定位日志并校验目录名==会话 id 且位于会话根目录内 → 删目录 → `workspace.detachSession()` + 取消归档/置顶 → 发 `api-session/removed`。
+* 删除动作走插件自己的主机路由 `POST /dsh-session-delete/delete`（body 可带 `force: true`）：校验会话存在 → 询问运行中的工作 → 未带 `force` 且会话被打开/有工作则拒绝（`session/busy`，带工作清单）→ 带 `force` 时先停工作、再卸载 Agent → 用存储后端自己的 `locate()` 定位日志并校验目录名==会话 id 且位于会话根目录内 → 删目录 → `workspace.detachSession()` + 取消归档/置顶 → 发 `api-session/removed`。
+* 「卸载 Agent」复用的是应用退出时的同一套收尾：取消当前回合 → 等 idle → 关闭持久化写句柄 → detach，因此被删会话不会留下半写入的日志。
 * 只用 Harness 公开接口，不改 `app.asar`；DSH 升级后依然可用。
 
 ### 安装
@@ -102,8 +104,10 @@ DeepSeek Harness 的核心设计是「会话只归档、从不删除」（`dsh-c
 
 ```bash
 curl http://127.0.0.1:<端口>/dsh-session-delete/health
-# {"ok":true,"plugin":"dsh-session-delete","build":3}
+# {"ok":true,"plugin":"dsh-session-delete","build":4}
 ```
+
+`build` 用来确认加载的是哪一版（不含 `force` 能力的旧版是 3）。
 
 ### 卸载
 

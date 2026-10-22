@@ -68,8 +68,9 @@ curl -s http://127.0.0.1:<端口>/dsh-session-delete/health
 
 * 位置：侧栏会话行 →「⋯」→ 删除会话（在「复制 Session ID」下面，红色）。
 * 会真的删除：会话日志目录 + 工作区记账 + 归档/置顶标记，**不可撤销**。
+* **正在阅读的对话也能删**：确认框会识别「这是当前打开的对话」，标题变成「删除当前对话」、按钮变成「关闭并删除」；确认后先关闭它（释放它对 Host Agent 的占用）再删除，完成后自动回到空白新会话。
+* **有运行中工作的会话也能删**：确认框会说明「确认后会先停止并删除」，插件先请各提供方停止工作（回合/后台任务/子代理/提醒），再卸载 Agent，然后删除。
 * 只想要「不显示」而不是删掉，请用内置的「归档会话」。
-* 正在打开、或仍在跑的会话会被拒绝并给出原因——先切到别的会话再删。
 * 卸载：插件页停用/移除，或 `plugin_manager` 的 `remove_bundle`（名字 `dsh-session-delete`）。
 
 ## 4. 排错
@@ -80,8 +81,8 @@ curl -s http://127.0.0.1:<端口>/dsh-session-delete/health
 | `health` 404 | 主机行没挂上：看安装结果是否为 `applied`，必要时重启 DSH |
 | 安装返回 `not-bundle` | target 指错了：必须指向 `dsh-session-delete` 目录（含 `package.json` / `cordis.patch.yml`），不是它的上级 |
 | 用户看不到菜单项 | 先刷新页面；再看实时 slot 注册（`cordis_inspect_query` 的 client `Slots.listSubTree`，root=`sidebar.workspaces.session.menu.item`）里是否有 `dsh-session-delete`、是否 `active: true` |
-| 删除报 `session/in-use` | 该会话正被保留/打开：先切走再删（这是刻意的保护） |
-| 删除报 `session/active` | 还有运行中的回合/后台任务/子代理/提醒：先停掉 |
+| 删除报 `session/busy` | 该会话正被打开或仍有工作：界面确认框会自动带 `force`；手工调接口时加 `{"force": true}` |
+| 删除报 `session/release-timeout` | Agent 收尾超过 15 秒（通常有未结束的轮次）：等它结束再试，或重启 DSH |
 | 删除后侧栏残留空「未分组」 | 用旧版本插件删过会话；刷新页面即可，或 `session/delete` 返回里 `notified: false` 说明通知没发出去 |
 | 想批量清理 | 仓库另有维护脚本思路：删前用 `sessionPersistence.stat()` 确认存在，删后对账「磁盘目录 vs 工作区记账」，别直接 `rm -rf` |
 
@@ -97,5 +98,6 @@ curl -s http://127.0.0.1:<端口>/dsh-session-delete/health
 
 * 菜单项：slot `sidebar.workspaces.session.menu.item`，id `dsh-session-delete`，order 500。
 * 确认框：slot `shell.overlay`，id `dsh-session-delete.dialog`。
-* 删除动作：主机路由 `POST /dsh-session-delete/delete`，body `{"sessionId": "..."}`；另有 `GET /dsh-session-delete/health`。
-* 顺序：会话存在 → 非 live（`ctx.sessions` / `ctx.agents`）→ `workspace/session-activity` 无运行中工作 → 用 `sessionPersistence.locate()` 定位目录并校验（目录名==session id、位于会话根内）→ 删目录 → `detachSession()` + 取消归档/置顶 → 发 `api-session/removed`。
+* 删除动作：主机路由 `POST /dsh-session-delete/delete`，body `{"sessionId": "...", "force"?: true}`；另有 `GET /dsh-session-delete/health`（`build` 字段可判断加载的是哪一版）。
+* 顺序：会话存在 → `workspace/session-activity` 询问运行中的工作 → 若「正在打开」或「有工作」则**没有 `force` 就拒绝**（`session/busy`，带 `forceable: true` 与工作清单）；有 `force` 时先 `workspace/session-stop` 停止各提供方的工作，再卸载内存中的 Agent（`agent.ctx.fiber.dispose()` → 取消回合 → 等 idle → 关闭持久化写句柄 → detach，和应用退出同一套收尾）→ 用 `sessionPersistence.locate()` 定位目录并校验（目录名==session id、位于会话根内）→ 删目录 → `detachSession()` + 取消归档/置顶 → 发 `api-session/removed`。
+* 客户端：确认框用 `useSessions` 读 `retainedBy.mainView` 判断「这是当前打开的对话」，并把确认改成「关闭并删除」；成功后由插件切到一个空白新会话。

@@ -36,10 +36,16 @@ const ROUTE_PREFIX = '/dsh-session-delete';
 const MAX_BODY_BYTES = 8 * 1024;
 
 /** Build marker reported by `GET /health`, so a reload is observable. */
-const BUILD = 3;
+const BUILD = 4;
 
 /** Session identities are one safe path segment; the backend encodes them 1:1. */
 const SESSION_ID_PATTERN = /^[A-Za-z0-9._~-]{1,200}$/;
+
+/** How long an in-memory Agent gets to finish its teardown before the request fails. */
+const RELEASE_TIMEOUT_MS = 15_000;
+
+/** Poll interval while waiting for an Agent's teardown to settle. */
+const RELEASE_POLL_MS = 100;
 
 /** A failure carrying the HTTP status and stable code the Client shows. */
 class DeleteError extends Error {
@@ -117,6 +123,66 @@ async function sessionActivity(ctx, sessionId) {
     () => Promise.resolve([]),
   );
   return Array.isArray(activity) ? activity : [];
+}
+
+/**
+ * Detach one live Agent so its Session log is no longer written.
+ *
+ * The agent-loop factory builds each Agent's context through `dsh-scope`'s
+ * `createScope()`, whose two disposers are `dispose()`. Disposing the Agent's
+ * context runs its teardown in order: cancel the active turn, wait for idle,
+ * dispose the agent scope, `handle.close()` (which releases the persistence
+ * write lock), then `detachAgent()` / `detachSession()`. That is exactly the
+ * sequence an application quit performs, so the log is quiescent afterwards.
+ *
+ * @param ctx - the plugin's Host context.
+ * @param sessionId - the Session whose Agent should be released.
+ * @returns a short description of what was released, or undefined when nothing was live.
+ */
+async function releaseLiveAgent(ctx, sessionId) {
+  const agent = ctx.agents.get(sessionId);
+  const session = ctx.sessions.get(sessionId);
+  const target = agent ?? session;
+  if (target === undefined) return undefined;
+  // `agent.ctx` is the scoped context; its fiber disposal is the single teardown path.
+  const agentCtx = agent !== undefined ? agent.ctx : undefined;
+  const disposeContext =
+    agentCtx !== undefined && typeof agentCtx.fiber?.dispose === 'function'
+      ? () => agentCtx.fiber.dispose()
+      : undefined;
+  const disposeSessionScope =
+    session !== undefined && typeof session.ctx?.fiber?.dispose === 'function'
+      ? () => session.ctx.fiber.dispose()
+      : undefined;
+  if (disposeContext === undefined && disposeSessionScope === undefined) {
+    throw new DeleteError(
+      500,
+      'session/release-unsupported',
+      '当前 Harness 版本无法在运行时卸载该会话，请重启应用后再删除',
+    );
+  }
+  const agentId = agent?.id;
+  if (disposeContext !== undefined) await disposeContext();
+  // A Session entered without an Agent (a prepared-but-unpublished one) still
+  // holds the store entry; release it the same way when it is still there.
+  if (ctx.sessions.get(sessionId) !== undefined && disposeSessionScope !== undefined) {
+    await disposeSessionScope();
+  }
+  // Cancellation is asynchronous; give the loop a bounded window to reach idle
+  // and close its handle before the caller removes the log directory.
+  const deadline = Date.now() + RELEASE_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (ctx.sessions.get(sessionId) === undefined && ctx.agents.get(sessionId) === undefined) break;
+    await new Promise((resolve) => setTimeout(resolve, RELEASE_POLL_MS));
+  }
+  if (ctx.agents.get(sessionId) !== undefined || ctx.sessions.get(sessionId) !== undefined) {
+    throw new DeleteError(
+      409,
+      'session/release-timeout',
+      '该会话仍在收尾（可能有未结束的轮次），请稍后再试',
+    );
+  }
+  return agentId === undefined ? 'session' : `agent:${agentId}`;
 }
 
 /** Which Workspace accounts for this Session, if any. */
@@ -215,7 +281,8 @@ function artifactDirectory(persistence, header, sessionId) {
  *
  * @param ctx - the plugin's Host context.
  * @param sessionId - the Session identity to delete.
- * @param options - `dryRun` resolves the target without removing anything.
+ * @param options - `dryRun` resolves the target without removing anything;
+ *   `force` releases a live Agent and stops running work before deleting.
  * @returns the deletion receipt.
  * @throws {DeleteError} with a stable code when the Session is unknown, busy,
  *   or cannot be located safely.
@@ -230,19 +297,37 @@ async function deleteSession(ctx, sessionId, options = {}) {
     throw new DeleteError(404, 'session/not-found', '该会话已不存在');
   }
   const live = liveReason(ctx, sessionId);
-  if (live !== undefined) {
-    throw new DeleteError(
-      409,
-      'session/in-use',
-      '该会话仍在当前进程中使用（正在打开或被保留），请先切换到其他会话，稍后再试',
-      { live },
-    );
-  }
   const activity = await sessionActivity(ctx, sessionId);
-  if (activity.length > 0) {
-    throw new DeleteError(409, 'session/active', '该会话仍有正在运行的工作，请先停止后再删除', {
-      activity: activity.map((entry) => (typeof entry === 'string' ? entry : entry?.kind ?? 'work')),
-    });
+  if (live !== undefined || activity.length > 0) {
+    // The user asked for exactly this Session, so the caller may force it: the
+    // Client confirms, then this route releases the Agent the same way an app
+    // quit does. Without `force` the refusal explains why and lists the work.
+    if (options.force !== true) {
+      throw new DeleteError(
+        409,
+        'session/busy',
+        live !== undefined
+          ? '该会话正在打开或有未释放的会话实例，确认后会先关闭它再删除'
+          : '该会话仍有正在运行的工作，确认后会先停止并删除',
+        {
+          ...(live === undefined ? {} : { live }),
+          ...(activity.length === 0
+            ? {}
+            : { activity: activity.map((entry) => (typeof entry === 'string' ? entry : entry?.kind ?? 'work')) }),
+          forceable: true,
+        },
+      );
+    }
+    // Force: stop running work first (the registry knows every provider), then
+    // release the live Agent so its persistence write handle closes.
+    if (activity.length > 0 && typeof ctx.parallel === 'function') {
+      try {
+        await ctx.parallel('workspace/session-stop', { sessionId });
+      } catch (error) {
+        ctx.logger?.warn?.(`dsh-session-delete: stop request failed for ${sessionId}: ${String(error)}`);
+      }
+    }
+    if (live !== undefined) await releaseLiveAgent(ctx, sessionId);
   }
   const directory = artifactDirectory(persistence, snapshot.header, sessionId);
   const account = accountingOf(ctx, sessionId);
@@ -311,7 +396,10 @@ export function apply(ctx) {
             }
             assertSameOrigin(req);
             const body = await readJsonBody(req);
-            const receipt = await deleteSession(ctx, body?.sessionId, { dryRun: body?.dryRun === true });
+            const receipt = await deleteSession(ctx, body?.sessionId, {
+              dryRun: body?.dryRun === true,
+              force: body?.force === true,
+            });
             log('info', `${name}: ${receipt.dryRun === true ? 'resolved' : 'deleted'} session ${receipt.sessionId}`);
             sendJson(res, 200, { ok: true, ...receipt });
           } catch (error) {
