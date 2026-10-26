@@ -1,0 +1,15 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+
+# Patch-script runtime output (regenerated on every run)
+skills/dsh-tray-restart/payload/out/
+skills/dsh-tray-restart/payload/backup/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Skills: user-local copies
+.agents/
