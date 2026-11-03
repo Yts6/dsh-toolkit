@@ -68,11 +68,11 @@
 
 DeepSeek Harness 的核心设计是「会话只归档、从不删除」（`dsh-client-ui-workspace` 与 `dsh-workspace` 的文档都明确写了这一点）。想真正清掉对话，此前只能自己上手删文件——而直接删文件会留下不一致：工作区记账里仍有这条会话、侧栏可能出现一个空的「未分组」。
 
-本插件补上这个缺口，规则只有一条：**当前正在使用的那个对话不能删，其他都能删**。
+本插件补上这个缺口。**没有一个对话是删不掉的**：包括你现在正看着的那个，也包括本次运行期间打开过的那些。
 
 * 会话日志目录、工作区记账、归档/置顶标记**一起**清掉，不留悬空记录；
-* **当前对话的菜单项置灰禁用**（文案「删除会话（当前对话不可删）」，悬停说明原因），切到别的对话即可删它；
-* **除当前对话外都能删**：即使它曾被打开过、仍被主机加载着，或还有运行中的回合/后台任务/子代理/提醒——插件会先停止这些工作、再卸载 Agent，然后删文件；
+* **当前正在看的对话也能删**：确认框写「删除并新建对话」——客户端先切到一个新的空白对话、等页面放手旧会话，再让主机删；删除失败会自动切回原对话，不会把人扔在空白会话里；
+* **打开过、仍被主机加载、或还有运行中的回合/后台任务/子代理/提醒的会话也能删**：主机先停掉这些工作，再用这个会话 Agent 的卸载句柄做一次与「退出应用」完全相同的收尾，确认两个注册表都放手后才动文件；
 * 主机删除后**主动通知所有已连接的页面**，侧栏立刻消失，不会留下空的「未分组」分组。
 
 ### 用法
@@ -82,9 +82,9 @@ DeepSeek Harness 的核心设计是「会话只归档、从不删除」（`dsh-c
 ### 实现要点
 
 * 菜单项注册在 `sidebar.workspaces.session.menu.item`（order 500，排在「复制 Session ID」之后），确认框注册在 `shell.overlay`。
-* 「当前对话」由 `useSessions` 读 `retainedBy.mainView` 判定：为真时菜单项置灰，且请求体带上 `current: true`；主机端**优先**检查该标记并拒绝（`session/current`），所以过期页面或手工调用也绕不过这条规则。
-* 删除动作走插件自己的主机路由 `POST /dsh-session-delete/delete`：`current` 检查 → 校验会话存在 → 询问运行中的工作 → 未带 `force` 且会话被加载/有工作则拒绝（`session/busy`，带工作清单）→ 带 `force` 时先停工作、再卸载 Agent → 用存储后端自己的 `locate()` 定位日志并校验目录名==会话 id 且位于会话根目录内 → 删目录 → `workspace.detachSession()` + 取消归档/置顶 → 发 `api-session/removed`。
-* 「卸载 Agent」复用的是应用退出时的同一套收尾：取消当前回合 → 等 idle → 关闭持久化写句柄 → detach，因此被删会话不会留下半写入的日志。
+* 「当前对话」由客户端读 `retainedBy.mainView` 判定：为真时先执行「新建会话」并等它归零，再请求主机；主机端**不再**检查 `current` 标记——「先切走」是页面的事，不该让一个过期的客户端把请求打死，所以手工调用 `/delete` 对任何会话都有效。
+* 删除动作走插件自己的主机路由 `POST /dsh-session-delete/delete`：校验会话存在 → 询问运行中的工作 → 未带 `force` 且会话被加载/有工作则拒绝（`session/busy`，带工作清单）→ 带 `force` 时先停工作、再用捕获的卸载句柄卸载 Agent 并轮询注册表 → 用存储后端自己的 `locate()` 定位日志并校验目录名==会话 id 且位于会话根目录内 → 删目录（`EBUSY/EPERM` 重试一次）→ 复核目录确实不在 → `workspace.detachSession()` + 取消归档/置顶 → 发 `api-session/removed`。
+* 「卸载 Agent」用的是 `agents.create()/resume()` 解析出的生命周期 `dispose` 句柄（插件加载时从 agent-loop 工厂的 `createAgent`/`resume`/`setupAndPublish` 捕获），与「退出应用」完全同一套收尾：取消当前回合 → 等 idle → 关闭持久化写句柄 → detach 两个注册表。**这一步才是删得掉已打开会话的关键**：只 dispose Agent 的 scope fiber 不会执行这套收尾（1.1.0 的 bug 就在这里）。收尾有 20 秒上限，超时报 `session/release-timeout` 且不删文件。
 * 只用 Harness 公开接口，不改 `app.asar`；DSH 升级后依然可用。
 
 ### 安装
@@ -95,7 +95,7 @@ DeepSeek Harness 的核心设计是「会话只归档、从不删除」（`dsh-c
 「插件」页 → 安装 → 粘贴 payload 目录的绝对路径
 ```
 
-也支持 tarball：`payload/dsh-session-delete-1.0.0.tgz`（装完原目录可删）。
+也支持 tarball：`payload/dsh-session-delete-1.2.0.tgz`（装完原目录可删）。
 
 ⚠️ 本地目录安装是**链接**方式：装好后不要移动/删除那个目录，否则插件失效。
 
@@ -105,10 +105,16 @@ DeepSeek Harness 的核心设计是「会话只归档、从不删除」（`dsh-c
 
 ```bash
 curl http://127.0.0.1:<端口>/dsh-session-delete/health
-# {"ok":true,"plugin":"dsh-session-delete","build":5}
+# {"ok":true,"plugin":"dsh-session-delete","build":6,
+#  "capture":{"createAgent":true,"resume":true,"setupAndPublish":true}}
+
+curl "http://127.0.0.1:<端口>/dsh-session-delete/inspect?sessionId=<会话ID>"
+# 只读诊断：stored / live / captured / handles / directory / workspace
 ```
 
-`build` 用来确认加载的是哪一版：**3** = 无 `force`；**4** = 有 `force`、但会误删当前对话；**5** = 有「当前对话」守卫（本版）。
+`build` 用来确认加载的是哪一版：**3** = 无 `force`；**4** = 有 `force`、但会误删当前对话；**5** = 有「当前对话」守卫、但删不掉已打开的会话；**6** = 真正卸载已打开的会话（本版，`capture` 三项应全为 `true`）。
+
+`inspect` 里 `live` 说明会话还在内存、`captured` 说明拿到了卸载句柄、`handles` 列出还开着的写句柄——删除失败时先看这三个字段。
 
 ### 卸载
 
@@ -178,7 +184,10 @@ dsh-toolkit/
 │  └─ dsh-tray-restart/
 │     ├─ SKILL.md
 │     └─ payload/apply-restart-patch.mjs ← 可移植补丁脚本
+├─ tests/
+│  └─ route.test.mjs                    ← 假 ctx 跑真实删除路由（6 个场景）
 └─ docs/
+   ├─ delete-session-1.2.0.md           ← 「打开过的对话删不掉」的根因与修复
    ├─ tray-restart-changes.md            ← 12 处改动逐条说明（版本升级时照此重新推导）
    └─ verification.md                    ← 两个功能的验证记录与已知限制
 ```
@@ -188,7 +197,7 @@ dsh-toolkit/
 * **删除会话**与平台无关；**托盘重启**仅 Windows（补丁锚点取自 Windows 版桌面应用）。
 * 版本：`0.2.1-rc.2` 实测。删除会话插件只依赖公开服务，通常跨版本可用；托盘补丁锚点随 `main.js` 变化，脚本会拒绝不匹配的版本，升级后请先 `--check`。
 * 删除会话**不支持撤销**（这就是"删除"的含义）；只想隐藏请用内置的「归档」。
-* 正在打开或正在运行的会话不能删除——先切到别的会话再删。
+* 删除正在运行的会话会终止它当前那一轮（这就是删除的意思）；`inspect` 里 `captured: false` 的会话（插件加载前就已建好的 Agent）删不掉，重启 DSH 后再删即可。
 * 补丁改的是安装目录里的文件，**不随应用升级保留**，需要重跑。
 
 
