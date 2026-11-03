@@ -96,7 +96,7 @@ curl -s "http://127.0.0.1:<端口>/dsh-session-delete/inspect?sessionId=<会话I
 |---|---|
 | `curl` 连不上 | 端口错，或插件没装到当前运行的 profile；确认 profile 名与端口 |
 | `health` 404 | 主机行没挂上：看安装结果是否为 `applied`，必要时重启 DSH |
-| `health.build` 小于 6 | 进程里还是旧代码：重启 DSH |
+| `health.build` 小于 6 | 1.2.0 之前的旧代码：重启 DSH |
 | `health.build` = 6 但有「批量删除会话…」 | 正常：批量是纯客户端更新，主机侧不重启也能用；重启后自检显示 7 |
 | 安装返回 `not-bundle` | target 指错了：必须指向 `dsh-session-delete` 目录（含 `package.json` / `cordis.patch.yml`），不是它的上级 |
 | 用户看不到菜单项 | 先刷新页面；再看实时 slot 注册（`cordis_inspect_query` 的 client `Slots.listSubTree`，root=`sidebar.workspaces.session.menu.item`）里是否有 `dsh-session-delete`、是否 `active: true` |
