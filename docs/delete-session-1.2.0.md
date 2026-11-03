@@ -3,6 +3,8 @@
 > 适用版本：`dsh-session-delete` 1.2.0（`health.build = 6`）。旧版 1.0.0 / 1.1.0 的表现是：
 > 已打开过的会话、以及当前正在使用的对话，点删除后等十几秒失败，报 `session/release-timeout`，
 > 磁盘上的会话目录还在。
+>
+> 1.3.0 新增的批量删除见 [delete-session-1.3.0.md](delete-session-1.3.0.md)（主机逻辑与本版相同，`health.build = 7`）。
 
 ## 症状
 

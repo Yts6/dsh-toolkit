@@ -49,7 +49,7 @@ const ROUTE_PREFIX = '/dsh-session-delete';
 const MAX_BODY_BYTES = 8 * 1024;
 
 /** Build marker reported by `GET /health`, so a reload is observable. */
-const BUILD = 6;
+const BUILD = 7;
 
 /** Session identities are one safe path segment; the backend encodes them 1:1. */
 const SESSION_ID_PATTERN = /^[A-Za-z0-9._~-]{1,200}$/;

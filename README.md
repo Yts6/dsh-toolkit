@@ -4,7 +4,7 @@
 
 | 能力 | 你能得到什么 | 类型 |
 | --- | --- | --- |
-| **[删除会话](#一删除会话)** | 侧栏会话行的「⋯」菜单多一项红色**删除会话**，确认后真正删掉会话日志、工作区记账与归档/置顶标记 | 插件（bundle）+ 安装它的 skill |
+| **[删除会话](#一删除会话)** | 侧栏会话行的「⋯」菜单多两项红色入口：**删除会话**（单个）与**批量删除会话…**（勾选多个一次删），确认后真正删掉会话日志、工作区记账与归档/置顶标记 | 插件（bundle）+ 安装它的 skill |
 | **[重启 DeepSeek Harness](#二托盘重启)** | 托盘右键菜单多一项**重启 DeepSeek Harness** | 改动安装目录 `app.asar` 的补丁脚本 + 运行它的 skill |
 
 > 有人会问：为什么不能只用一个 skill？
@@ -79,9 +79,25 @@ DeepSeek Harness 的核心设计是「会话只归档、从不删除」（`dsh-c
 
 侧栏会话行 →「⋯」→ **删除会话** → 确认框显示会话标题与 ID 并提示不可撤销 → 点「删除」。
 
+### 批量删除
+
+同一个「⋯」菜单里还有 **批量删除会话…**（红色，右侧显示当前存储的会话总数），点开是一个可勾选的会话列表：
+
+1. 列表按更新时间倒序，**含已归档会话**（标「已归档」），有运行中任务的标「运行中」；还没聊过的空白会话不列出；
+2. 顶部搜索框按标题或会话 ID 过滤；「全选 / 取消全选」只作用于当前筛选结果；
+3. 勾选后点「删除 N 个会话」，逐条执行并显示「正在删除 3 / 12…」，删掉的行走实时消失；
+4. 有失败时不会静默：失败的会话保持勾选并列在下方（附主机返回的原因），按钮变成「重试失败项」，重试只重发失败的那几条。
+
+两条规则：
+
+* **当前正在看的对话不参与批量删除**：它在列表里显示但置灰、不可勾选——删它必须先让页面切到新对话，这条路径交给单项删除；
+* 批量是**逐条**调用同一个主机删除接口（带 `force`）：某一条失败不影响其他条，`session/not-found` 当成功处理；中途关掉页面，只会让还没开始的那几条保留下来。
+
 ### 实现要点
 
-* 菜单项注册在 `sidebar.workspaces.session.menu.item`（order 500，排在「复制 Session ID」之后），确认框注册在 `shell.overlay`。
+* 单项菜单项注册在 `sidebar.workspaces.session.menu.item`（order 500，排在「复制 Session ID」之后），确认框注册在 `shell.overlay`（id `dsh-session-delete.dialog`）。
+* 批量菜单项是同一个 slot 里的第二项（id `dsh-session-delete.batch`，order 510）；批量弹窗在 `shell.overlay`（id `dsh-session-delete.batch-dialog`），列表数据来自页面的 `useSessions` 会话存储与 `useWorkspaces` 的归档集合，和侧栏完全一致。
+* 批量删除是**纯客户端**能力：浏览器逐条调用同一个 `POST /dsh-session-delete/delete`（带 `force`），主机半没有新增路由，因此「停工作 → 卸载 Agent → 删目录 → 清记账 → 通知页面」全部复用单项删除那套已经验过的流程。
 * 「当前对话」由客户端读 `retainedBy.mainView` 判定：为真时先执行「新建会话」并等它归零，再请求主机；主机端**不再**检查 `current` 标记——「先切走」是页面的事，不该让一个过期的客户端把请求打死，所以手工调用 `/delete` 对任何会话都有效。
 * 删除动作走插件自己的主机路由 `POST /dsh-session-delete/delete`：校验会话存在 → 询问运行中的工作 → 未带 `force` 且会话被加载/有工作则拒绝（`session/busy`，带工作清单）→ 带 `force` 时先停工作、再用捕获的卸载句柄卸载 Agent 并轮询注册表 → 用存储后端自己的 `locate()` 定位日志并校验目录名==会话 id 且位于会话根目录内 → 删目录（`EBUSY/EPERM` 重试一次）→ 复核目录确实不在 → `workspace.detachSession()` + 取消归档/置顶 → 发 `api-session/removed`。
 * 「卸载 Agent」用的是 `agents.create()/resume()` 解析出的生命周期 `dispose` 句柄（插件加载时从 agent-loop 工厂的 `createAgent`/`resume`/`setupAndPublish` 捕获），与「退出应用」完全同一套收尾：取消当前回合 → 等 idle → 关闭持久化写句柄 → detach 两个注册表。**这一步才是删得掉已打开会话的关键**：只 dispose Agent 的 scope fiber 不会执行这套收尾（1.1.0 的 bug 就在这里）。收尾有 20 秒上限，超时报 `session/release-timeout` 且不删文件。
@@ -95,7 +111,7 @@ DeepSeek Harness 的核心设计是「会话只归档、从不删除」（`dsh-c
 「插件」页 → 安装 → 粘贴 payload 目录的绝对路径
 ```
 
-也支持 tarball：`payload/dsh-session-delete-1.2.0.tgz`（装完原目录可删）。
+也支持 tarball：`payload/dsh-session-delete-1.3.0.tgz`（装完原目录可删）。
 
 ⚠️ 本地目录安装是**链接**方式：装好后不要移动/删除那个目录，否则插件失效。
 
@@ -112,7 +128,9 @@ curl "http://127.0.0.1:<端口>/dsh-session-delete/inspect?sessionId=<会话ID>"
 # 只读诊断：stored / live / captured / handles / directory / workspace
 ```
 
-`build` 用来确认加载的是哪一版：**3** = 无 `force`；**4** = 有 `force`、但会误删当前对话；**5** = 有「当前对话」守卫、但删不掉已打开的会话；**6** = 真正卸载已打开的会话（本版，`capture` 三项应全为 `true`）。
+`build` 用来确认加载的是哪一版：**3** = 无 `force`；**4** = 有 `force`、但会误删当前对话；**5** = 有「当前对话」守卫、但删不掉已打开的会话；**6** = 真正卸载已打开的会话（1.2.0，`capture` 三项应全为 `true`）；**7** = 1.3.0（主机逻辑与 6 相同，仅作为「带批量删除的版本」标记）。
+
+> 批量删除只改了浏览器端，所以主机侧 `build` 从 6 到 7 不改变任何删除行为。判断批量入口是否装上，直接看「⋯」菜单里有没有「批量删除会话…」；排查时也可以查实时 slot 注册：`sidebar.workspaces.session.menu.item` 里应有 id `dsh-session-delete.batch` 且 `active: true`。
 
 `inspect` 里 `live` 说明会话还在内存、`captured` 说明拿到了卸载句柄、`handles` 列出还开着的写句柄——删除失败时先看这三个字段。
 
@@ -188,6 +206,7 @@ dsh-toolkit/
 │  └─ route.test.mjs                    ← 假 ctx 跑真实删除路由（6 个场景）
 └─ docs/
    ├─ delete-session-1.2.0.md           ← 「打开过的对话删不掉」的根因与修复
+   ├─ delete-session-1.3.0.md           ← 1.3.0 批量删除：交互、逐条执行与验证
    ├─ tray-restart-changes.md            ← 12 处改动逐条说明（版本升级时照此重新推导）
    └─ verification.md                    ← 两个功能的验证记录与已知限制
 ```
@@ -197,6 +216,8 @@ dsh-toolkit/
 * **删除会话**与平台无关；**托盘重启**仅 Windows（补丁锚点取自 Windows 版桌面应用）。
 * 版本：`0.2.1-rc.2` 实测。删除会话插件只依赖公开服务，通常跨版本可用；托盘补丁锚点随 `main.js` 变化，脚本会拒绝不匹配的版本，升级后请先 `--check`。
 * 删除会话**不支持撤销**（这就是"删除"的含义）；只想隐藏请用内置的「归档」。
+* 批量删除时**当前正在看的对话不可勾选**（它需要先让页面切到新对话，请用单项删除）；空白新会话不出现在列表里。
+* 批量删除逐条执行：单条收尾最长 20 秒，卡住的会话会让整批慢下来，但不会阻塞后面的条目；中途关掉页面只会让未开始的条目保留下来。
 * 删除正在运行的会话会终止它当前那一轮（这就是删除的意思）；`inspect` 里 `captured: false` 的会话（插件加载前就已建好的 Agent）删不掉，重启 DSH 后再删即可。
 * 补丁改的是安装目录里的文件，**不随应用升级保留**，需要重跑。
 

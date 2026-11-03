@@ -35,9 +35,10 @@ window.__ModuleLoader__.load({
 
     const zh = {
       'meta.title': '删除会话',
-      'meta.description': '在会话菜单中增加“删除会话”：永久删除会话日志，并清除其工作区记账、归档与置顶标记；删除当前对话后会自动打开一个新的空白对话。',
+      'meta.description': '在会话菜单中增加“删除会话”与“批量删除会话”：永久删除会话日志，并清除其工作区记账、归档与置顶标记；删除当前对话后会自动打开一个新的空白对话，批量删除可一次勾选多个会话。',
       'menu.delete': '删除会话',
       'menu.deleteCurrent': '删除当前对话',
+      'menu.batch': '批量删除会话…',
       'menu.currentHint': '这是你正在使用的对话；删除后会为你打开一个新的空白对话',
       'dialog.title': '删除会话',
       'dialog.titleOpen': '删除当前对话',
@@ -58,13 +59,34 @@ window.__ModuleLoader__.load({
       'dialog.close': '关闭',
       'dialog.failed': '删除失败：{message}',
       'menu.failed': '无法删除会话：{message}',
+      'batch.title': '批量删除会话',
+      'batch.description': '勾选要永久删除的会话。删除会移除会话日志及其工作区记账、归档与置顶标记，且无法撤销。',
+      'batch.search': '搜索标题或会话 ID…',
+      'batch.selectAll': '全选',
+      'batch.clearAll': '取消全选',
+      'batch.selected': '已选择 {count} / {total} 个会话',
+      'batch.currentTag': '当前对话',
+      'batch.currentHint': '当前对话不参与批量删除；如需删除它，请先切换到其他对话，再用单项删除。',
+      'batch.currentNote': '当前对话不在批量删除范围内。',
+      'batch.archivedTag': '已归档',
+      'batch.runningTag': '运行中',
+      'batch.empty': '没有可删除的会话。',
+      'batch.noMatch': '没有匹配的会话。',
+      'batch.delete': '删除 {count} 个会话',
+      'batch.progress': '正在删除 {done} / {total}…',
+      'batch.failedTitle': '{count} 个会话未能删除',
+      'batch.failedItem': '“{name}”：{message}',
+      'batch.retry': '重试失败项',
+      'batch.deleting': '正在删除…',
+      'batch.close': '关闭',
     };
 
     const en = {
       'meta.title': 'Delete session',
-      'meta.description': 'Adds “Delete session” to the session menu, removing the session log together with its workspace accounting and archive/pin membership; deleting the open conversation starts a new blank one first.',
+      'meta.description': 'Adds “Delete session” and “Delete sessions…” to the session menu, removing session logs together with their workspace accounting and archive/pin membership, one at a time or in bulk; deleting the open conversation starts a new blank one first.',
       'menu.delete': 'Delete session',
       'menu.deleteCurrent': 'Delete this conversation',
+      'menu.batch': 'Delete sessions…',
       'menu.currentHint': 'This is the conversation you are using; deleting it opens a new blank conversation',
       'dialog.title': 'Delete session',
       'dialog.titleOpen': 'Delete this conversation',
@@ -85,6 +107,26 @@ window.__ModuleLoader__.load({
       'dialog.close': 'Close',
       'dialog.failed': 'Delete failed: {message}',
       'menu.failed': 'Could not delete the session: {message}',
+      'batch.title': 'Delete sessions',
+      'batch.description': 'Select the sessions to delete permanently. This removes each session log together with its workspace accounting, archive, and pin membership, and cannot be undone.',
+      'batch.search': 'Search by title or session ID…',
+      'batch.selectAll': 'Select all',
+      'batch.clearAll': 'Clear selection',
+      'batch.selected': '{count} of {total} selected',
+      'batch.currentTag': 'Open',
+      'batch.currentHint': 'The open conversation is not part of batch deletion; switch away and delete it from its own menu instead.',
+      'batch.currentNote': 'The open conversation is not included in batch deletion.',
+      'batch.archivedTag': 'Archived',
+      'batch.runningTag': 'Running',
+      'batch.empty': 'No sessions can be deleted.',
+      'batch.noMatch': 'No sessions match.',
+      'batch.delete': 'Delete {count} sessions',
+      'batch.progress': 'Deleting {done} / {total}…',
+      'batch.failedTitle': '{count} sessions could not be deleted',
+      'batch.failedItem': '“{name}”: {message}',
+      'batch.retry': 'Retry failed',
+      'batch.deleting': 'Deleting…',
+      'batch.close': 'Close',
     };
 
     /** Row + dialog styles, scoped by the plugin's own class prefix. */
@@ -122,6 +164,35 @@ window.__ModuleLoader__.load({
 .dsd-confirm{min-width:96px}
 .dsd-confirm:not(:disabled){color:var(--dsw-alias-state-error-primary,#e5484d)}
 .dsd-confirm:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-danger,rgba(229,72,77,.12))}
+.dsd-count{flex:none;margin-left:auto;color:var(--dsw-alias-label-tertiary,#8a8f98);font-size:12px;line-height:16px;font-variant-numeric:tabular-nums}
+.dsd-batch{width:min(560px,100%);max-height:calc(100vh - 48px);overflow:hidden}
+.dsd-batch .dsd-body{min-height:0}
+.dsd-searchRow{display:flex;align-items:center;gap:8px}
+.dsd-search{flex:1;min-width:0;box-sizing:border-box;height:32px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l2,#0000001f);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary,#0f1115);font-family:inherit;font-size:13px;line-height:20px}
+.dsd-search::placeholder{color:var(--dsw-alias-label-tertiary,#8a8f98)}
+.dsd-search:focus{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-brand-primary,#4d6bfe));outline-offset:1px}
+.dsd-toolbar{display:flex;align-items:center;gap:12px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary,#61666d)}
+.dsd-link{border:none;background:transparent;padding:0;color:var(--dsw-alias-brand-primary,#4d6bfe);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer}
+.dsd-link:hover:not(:disabled){text-decoration:underline}
+.dsd-link:disabled{color:var(--dsw-alias-label-tertiary,#8a8f98);cursor:default;text-decoration:none}
+.dsd-list{display:flex;flex-direction:column;gap:1px;max-height:min(42vh,340px);min-height:96px;overflow-y:auto;overscroll-behavior:contain;border:.5px solid var(--dsw-alias-border-l2,#0000001f);border-radius:10px;padding:4px}
+.dsd-row{display:flex;align-items:center;gap:10px;min-height:38px;padding:6px 8px;border-radius:7px;cursor:pointer;font-size:13px;line-height:20px}
+.dsd-row:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06))}
+.dsd-row[data-disabled=true]{cursor:not-allowed;opacity:.55}
+.dsd-row[data-disabled=true]:hover{background:transparent}
+.dsd-check{flex:none;width:15px;height:15px;margin:0;accent-color:var(--dsw-alias-brand-primary,#4d6bfe);cursor:inherit}
+.dsd-rowText{display:flex;flex-direction:column;min-width:0;flex:1}
+.dsd-rowTitle{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsd-rowId{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--ds-font-family-code,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary,#8a8f98)}
+.dsd-rowTags{display:flex;flex:none;align-items:center;gap:4px}
+.dsd-tag{flex:none;border-radius:999px;padding:0 6px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary,#61666d);background:var(--dsw-alias-bg-layer-3,rgba(0,0,0,.06))}
+.dsd-tagRun{color:var(--dsw-alias-state-business-primary,#4d6bfe)}
+.dsd-rowDate{flex:none;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary,#8a8f98);font-variant-numeric:tabular-nums}
+.dsd-hint{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,#8a8f98)}
+.dsd-failures{display:flex;flex-direction:column;gap:4px;max-height:120px;overflow-y:auto}
+.dsd-failures p{margin:0}
+.dsd-failureList{margin:0;padding-left:18px;font-size:12px;line-height:18px;color:var(--dsw-alias-state-error-primary,#e5484d);word-break:break-word}
+.dsd-empty{margin:0;padding:24px 8px;text-align:center;font-size:13px;color:var(--dsw-alias-label-tertiary,#8a8f98)}
 @media (prefers-reduced-motion:reduce){.dsd-item,.dsd-button{transition:none}}
 `;
 
@@ -248,6 +319,60 @@ window.__ModuleLoader__.load({
       ]);
     }
 
+    /** A compact `YYYY-MM-DD` stamp for one Session row; empty when unknown. */
+    function formatDay(updatedAt) {
+      if (typeof updatedAt !== 'number' || !Number.isFinite(updatedAt) || updatedAt <= 0) return '';
+      const date = new Date(updatedAt);
+      if (Number.isNaN(date.getTime())) return '';
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${date.getFullYear()}-${month}-${day}`;
+    }
+
+    /**
+     * The Session row menu entry that opens bulk deletion.
+     *
+     * It sits right below the single-delete row (`order` 510) and carries the
+     * stored-Session count, so the list the dialog will show is predictable
+     * before the dialog opens.
+     */
+    function BatchDeleteMenuItem({ useMenuOpenState, useSessions, t, openBatch }) {
+      const [, setMenuOpen] = useMenuOpenState();
+      const count = useSessions((list) => {
+        const stored = list?.byId;
+        if (stored === undefined) return 0;
+        let total = 0;
+        for (const session of Object.values(stored)) {
+          if (session !== undefined && session !== null && session.blank !== true) total += 1;
+        }
+        return total;
+      });
+      return h(React.Fragment, null, [
+        h(Styles, { key: 'styles' }),
+        h('div', { key: 'row', className: 'dsd-wrap' }, [
+          h(
+            'button',
+            {
+              key: 'button',
+              type: 'button',
+              role: 'menuitem',
+              className: 'dsd-item',
+              onClick: (event) => {
+                event.stopPropagation();
+                setMenuOpen(false);
+                openBatch();
+              },
+            },
+            [
+              h('span', { key: 'icon', className: 'dsd-icon' }, h(TrashIcon)),
+              h('span', { key: 'label', className: 'dsd-label' }, t('menu.batch')),
+              count > 0 ? h('span', { key: 'count', className: 'dsd-count' }, String(count)) : null,
+            ],
+          ),
+        ]),
+      ]);
+    }
+
     /**
      * The frame-wide confirmation dialog.
      *
@@ -277,7 +402,9 @@ window.__ModuleLoader__.load({
       const restoreRef = useRef(null);
 
       const pendingState = phase !== 'idle';
-      const open = request !== null;
+      // The batch dialog owns the `kind: 'batch'` request; this one handles a
+      // single Session (the menu row's own shape has no `kind`).
+      const open = request !== null && request.kind !== 'batch';
       const sessionId = request?.sessionId;
 
       useEffect(() => {
@@ -475,6 +602,381 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Bulk deletion dialog: pick several stored conversations, then remove them.
+     *
+     * The list is the page's own Session store, so it always matches the sidebar
+     * (archived rows included). The conversation currently on screen is shown
+     * but not selectable: removing it needs the page to let go of it first, and
+     * that hand-off belongs to the single-row flow. Every other row is deleted
+     * through the same per-Session Host route with `force`, one at a time —
+     * sequential so each row reports its own outcome, the page repaints between
+     * rows, and a failure never hides the ones that already succeeded.
+     */
+    function BatchDeleteDialog({ t, useLocaleRevision, useSessions, useWorkspaces, refreshSessions }) {
+      useLocaleRevision();
+      const request = usePending();
+      const open = request?.kind === 'batch';
+      const byId = useSessions((list) => list?.byId);
+      const currentId = useSessions((list) => {
+        const stored = list?.byId;
+        if (stored === undefined) return undefined;
+        for (const [id, session] of Object.entries(stored)) {
+          if ((session?.retainedBy?.mainView ?? 0) > 0) return id;
+        }
+        return undefined;
+      });
+      const archivedIds = useWorkspaces((snapshot) => snapshot?.archivedSessionIds);
+      const [selected, setSelected] = useState(() => new Set());
+      const [query, setQuery] = useState('');
+      const [phase, setPhase] = useState('idle');
+      const [progress, setProgress] = useState({ done: 0, total: 0 });
+      const [failures, setFailures] = useState([]);
+      const cancelRef = useRef(null);
+      const restoreRef = useRef(null);
+      const deleting = phase === 'deleting';
+
+      useEffect(() => {
+        if (!open) return undefined;
+        restoreRef.current = document.activeElement;
+        setSelected(new Set());
+        setQuery('');
+        setPhase('idle');
+        setProgress({ done: 0, total: 0 });
+        setFailures([]);
+        cancelRef.current?.focus();
+        return () => {
+          const previous = restoreRef.current;
+          if (previous instanceof HTMLElement && document.contains(previous)) previous.focus();
+        };
+      }, [open]);
+
+      // A completed deletion removes its row from the store; drop it from the
+      // selection too so the footer count never promises a row that is gone.
+      useEffect(() => {
+        if (!open) return;
+        setSelected((previous) => {
+          let changed = false;
+          const next = new Set();
+          for (const id of previous) {
+            if (byId?.[id] !== undefined) next.add(id);
+            else changed = true;
+          }
+          return changed ? next : previous;
+        });
+      }, [open, byId]);
+
+      useEffect(() => {
+        if (!open) return undefined;
+        const onKeyDown = (event) => {
+          if (event.key !== 'Escape') return;
+          event.stopPropagation();
+          if (!deleting) setPending(null);
+        };
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => document.removeEventListener('keydown', onKeyDown, true);
+      }, [open, deleting]);
+
+      if (!open) return null;
+
+      const archived = new Set(Array.isArray(archivedIds) ? archivedIds : []);
+      const rows = [];
+      for (const [id, session] of Object.entries(byId ?? {})) {
+        if (session === undefined || session === null || session.blank === true) continue;
+        const title = typeof session.title === 'string' ? session.title.trim() : '';
+        rows.push({
+          id,
+          title: title === '' ? t('dialog.untitled') : title,
+          updatedAt: typeof session.updatedAt === 'number' ? session.updatedAt : 0,
+          running: session.running === true,
+          archived: archived.has(id),
+          current: id === currentId,
+        });
+      }
+      rows.sort((left, right) => right.updatedAt - left.updatedAt || left.id.localeCompare(right.id));
+      const needle = query.trim().toLowerCase();
+      const visible =
+        needle === ''
+          ? rows
+          : rows.filter(
+              (row) => row.title.toLowerCase().includes(needle) || row.id.toLowerCase().includes(needle),
+            );
+      const selectable = visible.filter((row) => !row.current);
+      const allVisibleSelected = selectable.length > 0 && selectable.every((row) => selected.has(row.id));
+
+      const toggle = (id) => {
+        if (deleting) return;
+        setSelected((previous) => {
+          const next = new Set(previous);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+          return next;
+        });
+      };
+
+      const toggleVisible = () => {
+        if (deleting) return;
+        setSelected((previous) => {
+          const next = new Set(previous);
+          if (allVisibleSelected) for (const row of selectable) next.delete(row.id);
+          else for (const row of selectable) next.add(row.id);
+          return next;
+        });
+      };
+
+      const run = async (ids) => {
+        if (ids.length === 0) return;
+        setFailures([]);
+        setPhase('deleting');
+        setProgress({ done: 0, total: ids.length });
+        const failed = [];
+        let stale = false;
+        for (let index = 0; index < ids.length; index += 1) {
+          const sessionId = ids[index];
+          try {
+            const response = await fetch(ROUTE, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              credentials: 'same-origin',
+              // `force` is what makes a stored-but-loaded Session deletable:
+              // the Host stops its work and runs the Agent teardown an app quit
+              // would perform before it removes the log.
+              body: JSON.stringify({ sessionId, force: true }),
+            });
+            const payload = await response.json().catch(() => null);
+            if (payload?.code === 'session/not-found') {
+              // Already gone: the requested outcome holds.
+            } else if (!response.ok || payload?.ok !== true) {
+              failed.push({ id: sessionId, message: payload?.message ?? `HTTP ${response.status}` });
+            } else if (payload.notified === false) {
+              stale = true;
+            }
+          } catch (error) {
+            failed.push({ id: sessionId, message: error instanceof Error ? error.message : String(error) });
+          }
+          setProgress({ done: index + 1, total: ids.length });
+          setSelected((previous) => {
+            if (!previous.has(sessionId)) return previous;
+            const next = new Set(previous);
+            next.delete(sessionId);
+            return next;
+          });
+        }
+        if (stale) refreshSessions();
+        if (failed.length === 0) {
+          setPhase('idle');
+          setPending(null);
+          return;
+        }
+        // Keep exactly the failed rows selected, so one click retries them.
+        setFailures(failed);
+        setSelected(new Set(failed.map((entry) => entry.id)));
+        setPhase('done');
+      };
+
+      const titleOf = (id) => {
+        const session = byId?.[id];
+        const title = typeof session?.title === 'string' ? session.title.trim() : '';
+        return title === '' ? id : title;
+      };
+
+      const statusText = deleting ? t('batch.progress', { done: progress.done, total: progress.total }) : null;
+
+      return h(React.Fragment, null, [
+        h(Styles, { key: 'styles' }),
+        h(
+          'div',
+          {
+            key: 'root',
+            className: 'dsd-root',
+            onMouseDown: (event) => {
+              if (event.target === event.currentTarget && !deleting) setPending(null);
+            },
+          },
+          [
+            h('div', { key: 'mask', className: 'dsd-mask' }),
+            h(
+              'div',
+              {
+                key: 'dialog',
+                className: 'dsd-dialog dsd-batch',
+                role: 'dialog',
+                'aria-modal': true,
+                'aria-labelledby': 'dsd-batch-title',
+                'aria-describedby': 'dsd-batch-description',
+              },
+              [
+                h('div', { key: 'header', className: 'dsd-header' }, [
+                  h('h2', { key: 'title', id: 'dsd-batch-title', className: 'dsd-title' }, t('batch.title')),
+                  h(
+                    'button',
+                    {
+                      key: 'close',
+                      type: 'button',
+                      className: 'dsd-close',
+                      'aria-label': t('batch.close'),
+                      disabled: deleting,
+                      onClick: () => {
+                        if (!deleting) setPending(null);
+                      },
+                    },
+                    '✕',
+                  ),
+                ]),
+                h('div', { key: 'body', className: 'dsd-body' }, [
+                  h(
+                    'p',
+                    { key: 'description', id: 'dsd-batch-description', className: 'dsd-text' },
+                    t('batch.description'),
+                  ),
+                  h('div', { key: 'searchRow', className: 'dsd-searchRow' }, [
+                    h('input', {
+                      key: 'search',
+                      type: 'search',
+                      className: 'dsd-search',
+                      placeholder: t('batch.search'),
+                      'aria-label': t('batch.search'),
+                      value: query,
+                      disabled: deleting,
+                      onChange: (event) => setQuery(event.target.value),
+                    }),
+                  ]),
+                  h('div', { key: 'toolbar', className: 'dsd-toolbar' }, [
+                    h(
+                      'button',
+                      {
+                        key: 'toggleVisible',
+                        type: 'button',
+                        className: 'dsd-link',
+                        disabled: deleting || selectable.length === 0,
+                        onClick: toggleVisible,
+                      },
+                      allVisibleSelected ? t('batch.clearAll') : t('batch.selectAll'),
+                    ),
+                    h(
+                      'span',
+                      { key: 'count' },
+                      t('batch.selected', { count: selected.size, total: rows.length }),
+                    ),
+                  ]),
+                  h(
+                    'div',
+                    { key: 'list', className: 'dsd-list', role: 'group', 'aria-label': t('batch.title') },
+                    rows.length === 0
+                      ? [h('p', { key: 'empty', className: 'dsd-empty' }, t('batch.empty'))]
+                      : visible.length === 0
+                        ? [h('p', { key: 'noMatch', className: 'dsd-empty' }, t('batch.noMatch'))]
+                        : visible.map((row) =>
+                            h(
+                              'label',
+                              {
+                                key: row.id,
+                                className: 'dsd-row',
+                                'data-disabled': row.current ? 'true' : undefined,
+                                title: row.current ? t('batch.currentHint') : undefined,
+                              },
+                              [
+                                h('input', {
+                                  key: 'check',
+                                  type: 'checkbox',
+                                  className: 'dsd-check',
+                                  checked: selected.has(row.id),
+                                  disabled: row.current || deleting,
+                                  onChange: () => toggle(row.id),
+                                }),
+                                h('span', { key: 'text', className: 'dsd-rowText' }, [
+                                  h('span', { key: 'title', className: 'dsd-rowTitle' }, row.title),
+                                  h('span', { key: 'id', className: 'dsd-rowId' }, row.id),
+                                ]),
+                                row.current || row.archived || row.running
+                                  ? h('span', { key: 'tags', className: 'dsd-rowTags' }, [
+                                      row.current
+                                        ? h('span', { key: 'current', className: 'dsd-tag' }, t('batch.currentTag'))
+                                        : null,
+                                      row.archived
+                                        ? h('span', { key: 'archived', className: 'dsd-tag' }, t('batch.archivedTag'))
+                                        : null,
+                                      row.running
+                                        ? h(
+                                            'span',
+                                            { key: 'running', className: 'dsd-tag dsd-tagRun' },
+                                            t('batch.runningTag'),
+                                          )
+                                        : null,
+                                    ])
+                                  : null,
+                                h('span', { key: 'date', className: 'dsd-rowDate' }, formatDay(row.updatedAt)),
+                              ],
+                            ),
+                          ),
+                  ),
+                  currentId !== undefined
+                    ? h('p', { key: 'currentNote', className: 'dsd-hint' }, t('batch.currentNote'))
+                    : null,
+                  failures.length > 0
+                    ? h('div', { key: 'failures', className: 'dsd-failures' }, [
+                        h(
+                          'p',
+                          { key: 'failedTitle', className: 'dsd-error', role: 'alert' },
+                          t('batch.failedTitle', { count: failures.length }),
+                        ),
+                        h(
+                          'ul',
+                          { key: 'failedList', className: 'dsd-failureList' },
+                          failures.map((failure) =>
+                            h(
+                              'li',
+                              { key: failure.id },
+                              t('batch.failedItem', { name: titleOf(failure.id), message: failure.message }),
+                            ),
+                          ),
+                        ),
+                      ])
+                    : null,
+                  statusText !== null
+                    ? h('p', { key: 'status', className: 'dsd-status', role: 'status' }, statusText)
+                    : null,
+                ]),
+                h('div', { key: 'footer', className: 'dsd-footer' }, [
+                  h(
+                    'button',
+                    {
+                      key: 'cancel',
+                      type: 'button',
+                      ref: cancelRef,
+                      className: 'dsd-button',
+                      disabled: deleting,
+                      onClick: () => {
+                        if (!deleting) setPending(null);
+                      },
+                    },
+                    t('dialog.cancel'),
+                  ),
+                  h(
+                    'button',
+                    {
+                      key: 'confirm',
+                      type: 'button',
+                      className: 'dsd-button dsd-confirm',
+                      disabled: deleting || selected.size === 0,
+                      // Returns the run promise (React ignores it) so a caller —
+                      // the tests included — can await the whole batch.
+                      onClick: () => run([...selected]),
+                    },
+                    phase === 'done'
+                      ? t('batch.retry')
+                      : deleting
+                        ? t('batch.deleting')
+                        : t('batch.delete', { count: selected.size }),
+                  ),
+                ]),
+              ],
+            ),
+          ],
+        ),
+      ]);
+    }
+
+    /**
      * Resolve once no main-view retention remains for `sessionId`.
      *
      * `retainedBy.mainView` is the Session Controller's own count of the page's
@@ -518,6 +1020,9 @@ window.__ModuleLoader__.load({
         ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-session-delete: locale');
 
         const openDelete = (request) => setPending(request);
+
+        /** Open the bulk-deletion dialog. */
+        const openBatch = () => setPending({ kind: 'batch' });
 
         /** Whether this page is still displaying `sessionId` in its main view. */
         const isMainViewSession = (sessionId) => {
@@ -572,6 +1077,19 @@ window.__ModuleLoader__.load({
           ),
         );
 
+        ctx.slots.inject('sidebar.workspaces.session.menu.item', () =>
+          ctx.slots.register(
+            {
+              name: 'sidebar.workspaces.session.menu.item',
+              id: 'dsh-session-delete.batch',
+              order: MENU_ORDER + 10,
+              locale: NS,
+              inject: () => ({ t, openBatch }),
+            },
+            BatchDeleteMenuItem,
+          ),
+        );
+
         ctx.slots.inject('shell.overlay', () =>
           ctx.slots.register(
             {
@@ -588,6 +1106,18 @@ window.__ModuleLoader__.load({
               }),
             },
             DeleteSessionDialog,
+          ),
+        );
+
+        ctx.slots.inject('shell.overlay', () =>
+          ctx.slots.register(
+            {
+              name: 'shell.overlay',
+              id: 'dsh-session-delete.batch-dialog',
+              locale: NS,
+              inject: () => ({ t, useLocaleRevision, refreshSessions }),
+            },
+            BatchDeleteDialog,
           ),
         );
       },

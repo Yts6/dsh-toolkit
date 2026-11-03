@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Delete session",
-    "description": "Adds “Delete session” to the session menu: removes the session log file together with its workspace accounting, archive, and pin membership."
+    "description": "Adds “Delete session” and “Delete sessions…” to the session menu: removes session log files together with their workspace accounting, archive, and pin membership. The open conversation can be deleted too, and a new blank conversation opens in its place; bulk deletion selects several sessions at once."
   }
 }

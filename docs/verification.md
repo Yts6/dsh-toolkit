@@ -8,7 +8,7 @@
 
 | 项 | 结果 |
 |---|---|
-| 主机路由存活 | `GET /dsh-session-delete/health` → `{"ok":true,…,"build":4}` |
+| 主机路由存活 | `GET /dsh-session-delete/health` → `{"ok":true,…,"build":7}` |
 | 非法会话 id | `session/invalid-id`（拒绝，未触碰磁盘） |
 | 不存在的会话 | `session/not-found` |
 | 真实删除 | 删除后日志目录从磁盘消失，返回回执含 `directory` / `revision` |
@@ -26,8 +26,29 @@
 * 浏览器里的视觉呈现与「删除后回到空白会话」的观感由用户目视确认；开发机无法截图验证。
 * 只在一个 profile 上验证过；多 profile 并发未测。
 * 删除是不可逆的；插件刻意不提供撤销。
-* 卸载 Agent 后的收尾有 15 秒上限：若有未结束的轮次超过它，请求以 `session/release-timeout` 失败且不删文件。
+* 卸载 Agent 后的收尾有 20 秒上限：若有未结束的轮次超过它，请求以 `session/release-timeout` 失败且不删文件。
 * 若删除后 `notified: false`，说明通知没发出去——页面刷新即可恢复一致。
+
+### 1.3.0 批量删除
+
+**已实测**
+
+| 项 | 结果 |
+|---|---|
+| 实时 slot 注册 | `sidebar.workspaces.session.menu.item` 出现 `dsh-session-delete.batch`（order 510，`active: true`）；`shell.overlay` 出现 `dsh-session-delete.batch-dialog`；各自只有一份，无重复注册 |
+| 列表与勾选 | 渲染级自动化：空白会话不列出、归档行有标签、当前对话的勾选框 disabled、全选跳过当前对话 |
+| 逐条删除 | 渲染级自动化：请求顺序与请求体 `{ sessionId, force: true }` 正确；删完弹窗关闭 |
+| 部分失败 | 渲染级自动化：失败原因显示、失败项保持勾选、「重试失败项」只重发失败项，成功后关闭 |
+| 搜索与空态 | 渲染级自动化：标题过滤生效；空列表/无匹配有说明，确认按钮 disabled |
+| 单项回归 | 渲染级自动化：1.2.0 的菜单文案、当前对话流程、错误与中止路径全部保持通过 |
+| 主机路由 | 对两个真实会话各跑一次 `POST /delete` + `dryRun`：返回目录与 revision 正确，未触碰数据 |
+| 版本标记 | `health.build` 从 6 提到 7（主机删除逻辑不变，仅标记「带批量删除的发布」） |
+
+**未验证 / 限制**
+
+* 浏览器里的视觉观感（列表滚动、弹窗高度）由用户目视确认；没有截图验证。
+* 没有对几十个会话跑完整批量耗时测试；已知单条收尾上限 20 秒。
+* 批量是浏览器逐条调用主机接口：中途关掉页面，未开始删除的条目会保留。
 
 ## 托盘重启
 

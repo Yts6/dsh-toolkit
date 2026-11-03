@@ -1,8 +1,8 @@
 {
   "name": "dsh-session-delete",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
-  "description": "Adds “Delete session” to the session menu: removes the session log together with its workspace accounting and archive/pin membership. Every stored session can be deleted, including the open conversation: the Host first tears its Agent down exactly like an app quit, then deletes the record.",
+  "description": "Adds “Delete session” and “Delete sessions…” to the session menu: removes session logs together with their workspace accounting and archive/pin membership, one conversation or many at once. Every stored session can be deleted, including the open conversation: the Host first tears its Agent down exactly like an app quit, then deletes the record.",
   "type": "module",
   "icon": "icon.svg",
   "exports": {
